@@ -1,8 +1,6 @@
 # AmazonConnect-Extended-HoursOfOperation
 Amazon Connectの拡張（オペレーション時間）
 
-## 1 環境
-
 本ドキュメントは、下記が予め利用可能になっている事が前提となっております。
 
 * git/yarn
@@ -10,6 +8,13 @@ Amazon Connectの拡張（オペレーション時間）
 * AWS SAM (samコマンドのみ)
 * TypeScript
 * VSCode（必須ではありません）
+
+## 1 概要
+
+Amazon Connectに営業時間内外の判定を行う処理を追加するものです。
+S3上の設定ファイル（OperationTime.txt）を編集することで、営業時間、休日等の指定が可能です。
+
+![](images/014.png)
 
 ## 2 セットアップ
 
@@ -24,6 +29,7 @@ $ cd AmazonConnect-Extended-HoursOfOperation
 ```
 $ cd app
 ```
+外部モジュールのダウンロード
 
 ```
 [app]$ yarn install
@@ -43,13 +49,17 @@ $ cd app
 
 ```
 ├── README.md
-├── images
+├── images (ドキュメント用画像)
+├── sample
+│   ├── OperationTime.txt (時間設定のサンプル)
+│   └── Sample（問い合わせフローのサンプル）
 └── app
     ├── dst (js出力)
-    |   ├── yarn.lock (デプロイ用)
-    |   ├── package.json (デプロイ用)
-    |   └── node_modules(デプロイ用)
+    │   ├── yarn.lock (デプロイ用)
+    │   ├── package.json (デプロイ用)
+    │   └── node_modules(デプロイ用)
     ├── src (tsソースコード)
+    │   └── index.ts
     ├── template.yml (AWS SAM テンプレート)
     ├── tsconfig.json (TypeScript設定)
     ├── yarn.lock (TS用)
@@ -66,7 +76,7 @@ app/tsconfig.jsonに設定ファイルがあり、これを元にコンパイル
 [app]$ tsc
 ```
 
-VSCodeでは、Shift+Cmd+bで表示される選択から、tsc:ウォッチ（常時動作）若しくは、tsc:ビルド（１回のみ）　でコンパイルできます。
+VSCodeでは、Shift+Cmd+b（ビルドタスクの実行）で表示される選択から、tsc:ウォッチ（常時動作）若しくは、tsc:ビルド（１回のみ）　でコンパイルできます。
 
 ![](images/001.png)
 
@@ -86,7 +96,7 @@ SAMによるパッケージ作成のために、予め、S3のバケットが必
 [app]$ sam deploy --template-file packaged.yaml --stack-name ${StackName} --capabilities CAPABILITY_IAM --p ${Profile} 
 ```
 
-VSCode上でデプロイするには、Cmd+dで表示される選択から、**deploy**タスクを選択します。
+VSCode上でデプロイするには、Cmd+d（カスタム：タスク実行）で表示される選択から、**deploy**タスクを選択します。
 
 ![](images/003.png)
 
@@ -105,7 +115,7 @@ VSCode上でデプロイするには、Cmd+dで表示される選択から、**d
     ]
 }
 ```
-パラメータを変更する場合は、**.vscode/deploy.sh**の環境変数の設定を編集して下さい。
+バケット名などパラメータの変更は、**.vscode/deploy.sh**の環境変数を編集して下さい。
 ```sh
 export Profile=プロファイル名
 export BucketName=バケット名
@@ -138,7 +148,7 @@ sam deploy --template-file packaged.yaml --stack-name ${StackName} --capabilitie
 ```
 [app]$ export Profile=プロファイル名
 [app]$ export BucketName=バケット名
-[app]$ aws s3 cp OperationTime.txt s3://${BucketName}/ --profile=${Profile}
+[app]$ aws s3 cp ../sample/OperationTime.txt s3://${BucketName}/ --profile=${Profile}
 ```
 
 ![](images/007.png)
@@ -146,31 +156,98 @@ sam deploy --template-file packaged.yaml --stack-name ${StackName} --capabilitie
 
 ## 8 設置
 
-Amazon Connect のコンタクトフローに適用する手順は、以下のとおりです。
+本プロジェクトを設置する手順は、以下のとおりです。
 
+* インスタンスへのLambdaの追加
+* 問い合わせフローの設置
+* **AWS Lambda関数を呼び出す**ブロックの設定
+
+### (1) インスタンスへのLambdaの追加
 
 * インスタンスの設定で、**AWS Lambda**関数を追加します。関数名は、CloudFormationの出力で確認して下さい。
 
 ![](images/009.png)
 
-* **AWS Lambda関数を呼び出す**及び、**問い合わせ属性を確認する**のブロックを配置します。
+### (2) 問い合わせフローの設置
 
-![](images/012.png)
+問い合わせフローのサンプル(sample/Sample)をインポートします。
+
+![](images/011.png)
+![](images/014.png)
+
+
+### (3) **AWS Lambda関数を呼び出す**ブロックの設定
 
 * **AWS Lambda関数を呼び出す**ブロックのオプションで、関数を選択します。
 
 ![](images/010.png)
 
-* **問い合わせ属性を確認する**ブロックのオプションで、Lambdaの戻り値で分岐させます。
-
-![](images/011.png)
-
-実行すると、Lambdaのログで動作が確認できます。
+動作の状況は、Lambdaのログで確認が可能です。
 
 ![](images/013.png)
 
+## 9 設定
 
-## 9 デバック
+設定要領は、曜日ごとの営業時間及び、休日の２種類あります。
+
+### (1) 曜日ごとの営業時間
+カンマ区切りで下記のとおり
+
+```
+曜日,始業時間,就業時間
+```
+
+### (2) 休日
+１行に１件で設定
+
+```
+月/日
+```
+なお、空行や、#以降（コメント）は、無視されます。
+
+**OperationTime.txt**
+```
+月,09:00,19:00
+火,09:00,19:00
+水,09:00,19:00
+木,09:00,19:00
+金,09:00,19:00
+
+1/13 # 会社の創立記念日
+
+1/1　#元旦
+1/8　#成人の日
+
+# 2/11 #建国記念日
+2/12 #建国記念日(振替)
+
+3/21 #春分の日
+
+# 4/29 #昭和の日
+4/30 #昭和の日(振替)
+
+5/3 #憲法記念日
+5/4 #みどりの日　
+5/5 #こどもの日
+
+7/16 #海の日
+
+8/11 #山の日
+
+9/17 #敬老の日（9月第三月曜日）
+# 9/23 #秋分の日
+9/24 #秋分の日(振替）
+
+10/8 #体育の日
+
+11/3 #文化の日
+11/23 #勤労感謝の日
+# 12/23 #天皇誕生日
+12/24 #天皇誕生日(振替)
+```
+
+
+## 10 デバック
 
 VSCodeでは、F5キーを押すことでローカルでデバック実行が可能です。ブレークポイントを指定して、トレースすることもできます。
 
