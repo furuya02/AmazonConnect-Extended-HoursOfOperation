@@ -14,7 +14,7 @@ Amazon Connectの拡張（オペレーション時間）
 Amazon Connectに営業時間内外の判定を行う処理を追加するものです。
 S3上の設定ファイル（OperationTime.txt）を編集することで、営業時間、休日等の指定が可能です。
 
-![](images/014.png)
+![](images/012.png)
 
 ## 2 セットアップ
 
